@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse Cars — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <!-- Hero Banner -->
+  <section class="hero-banner">
+    <div class="container">
+      <h1 class="hero-title">Find your perfect<br><em>drive</em> today</h1>
+      <p class="hero-sub">Browse our full fleet of available vehicles — no account needed to explore.</p>
+    </div>
+  </section>
+
+  <div class="container page-wrapper">
+
+    <!-- Agency notice (shown when agency is logged in) -->
+    <div id="agency-notice" class="alert alert-info mb-2" style="display:none;">
+      ℹ️ You are logged in as a Car Agency. Agencies cannot rent cars.
+      <a href="dashboard.html" style="margin-left:8px;">Go to Dashboard →</a>
+    </div>
+
+    <!-- Page header row -->
+    <div class="d-flex justify-between align-center mb-2">
+      <div>
+        <h2>Available Cars</h2>
+        <p id="car-count" style="color:var(--text-muted);font-size:0.875rem;margin-top:0.2rem;"></p>
+      </div>
+    </div>
+
+    <!-- Car listing -->
+    <div id="cars-container">
+      <div class="loading-overlay">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Booking Success Modal -->
+  <div id="booking-modal" style="
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(0,0,0,0.6);
+    backdrop-filter:blur(4px);
+    z-index:200;
+    align-items:center;
+    justify-content:center;
+  ">
+    <div class="auth-card fade-up" style="max-width:420px;text-align:center;">
+      <div style="font-size:2.5rem;margin-bottom:1rem;">🎉</div>
+      <h3 id="modal-title">Booking Confirmed!</h3>
+      <p id="modal-body" style="color:var(--text-secondary);margin:0.75rem 0 1.5rem;font-size:0.9rem;"></p>
+      <button class="btn btn-primary btn-block" onclick="closeModal()">Done</button>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    renderNavbar('cars');
+
+    // Show agency notice
+    if (Auth.isAgency()) {
+      document.getElementById('agency-notice').style.display = 'flex';
+    }
+
+    // ── Load all cars ──────────────────────────────────────────
+    async function loadCars() {
+      const { ok, data } = await apiFetch('/cars');
+      const container = document.getElementById('cars-container');
+
+      if (!ok) {
+        container.innerHTML = `<div class="empty-state"><p>Failed to load cars. Please refresh.</p></div>`;
+        return;
+      }
+
+      const cars = data.cars || [];
+      document.getElementById('car-count').textContent =
+        cars.length === 0 ? 'No cars available yet' : `${cars.length} car${cars.length !== 1 ? 's' : ''} available`;
+
+      if (cars.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M5 17H3a2 2 0 01-2-2v-4l2.5-6h13L19 11v4a2 2 0 01-2 2h-2"/>
+              <circle cx="7.5" cy="17.5" r="2.5"/>
+              <circle cx="14.5" cy="17.5" r="2.5"/>
+            </svg>
+            <h3>No cars yet</h3>
+            <p>Check back soon for available rentals.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `<div class="card-grid">${cars.map(renderCarCard).join('')}</div>`;
+    }
+
+    // ── Render a single car card ───────────────────────────────
+    function renderCarCard(car) {
+      const bookingSection = buildBookingSection(car);
+      return `
+        <div class="card car-card fade-up">
+          <div class="car-card-header">
+            <span class="car-model">${escHtml(car.vehicle_model)}</span>
+            <span class="car-number">${escHtml(car.vehicle_number)}</span>
+          </div>
+
+          <div class="car-meta">
+            <div class="car-meta-item">
+              <span class="car-meta-label">Seats</span>
+              <span class="car-meta-value">${car.seating_capacity} persons</span>
+            </div>
+            <div class="car-meta-item">
+              <span class="car-meta-label">Rate</span>
+              <span class="car-price">${formatCurrency(car.rent_per_day)}<span>/day</span></span>
+            </div>
+          </div>
+
+          <p class="car-agency">Listed by: ${escHtml(car.agency_name)}</p>
+
+          ${bookingSection}
+        </div>`;
+    }
+
+    // ── Booking section — varies by auth state ─────────────────
+    function buildBookingSection(car) {
+      const isLoggedIn = Auth.isLoggedIn();
+      const isCustomer = Auth.isCustomer();
+      const isAgency   = Auth.isAgency();
+
+      if (isCustomer) {
+        // Show full booking form
+        return `
+          <div class="booking-form">
+            <div class="booking-row">
+              <div class="form-group">
+                <label class="form-label">Start Date</label>
+                <input
+                  type="date"
+                  class="form-control start-date"
+                  data-car-id="${car.id}"
+                  min="${getTodayISO()}"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Number of Days</label>
+                <select class="form-control num-days" data-car-id="${car.id}">
+                  ${[1,2,3,4,5,6,7,10,14,21,30].map(d => `<option value="${d}">${d} day${d>1?'s':''}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div id="alert-car-${car.id}" class="alert"></div>
+            <button
+              class="btn btn-primary"
+              onclick="rentCar(${car.id}, '${escHtml(car.vehicle_model)}', ${car.rent_per_day})"
+              id="rent-btn-${car.id}"
+            >
+              Rent this Car
+            </button>
+          </div>`;
+      }
+
+      if (isAgency) {
+        // Agency — show disabled state
+        return `
+          <div class="booking-form">
+            <button class="btn btn-secondary" disabled>
+              Agencies cannot rent cars
+            </button>
+          </div>`;
+      }
+
+      // Not logged in — show login prompt button
+      return `
+        <div class="booking-form">
+          <button class="btn btn-secondary" onclick="window.location.href='login.html'">
+            Login to Rent →
+          </button>
+        </div>`;
+    }
+
+    // ── Rent car handler ───────────────────────────────────────
+    async function rentCar(carId, model, rentPerDay) {
+      const startDateEl = document.querySelector(`.start-date[data-car-id="${carId}"]`);
+      const numDaysEl   = document.querySelector(`.num-days[data-car-id="${carId}"]`);
+      const alertId     = `alert-car-${carId}`;
+      const btnId       = `rent-btn-${carId}`;
+
+      hideAlert(alertId);
+
+      const startDate  = startDateEl ? startDateEl.value : '';
+      const numDays    = numDaysEl   ? parseInt(numDaysEl.value) : 0;
+
+      if (!startDate) {
+        return showAlert(alertId, 'Please select a start date.');
+      }
+
+      setLoading(btnId, true);
+
+      const { ok, data } = await apiFetch('/bookings', {
+        method: 'POST',
+        body: JSON.stringify({ car_id: carId, start_date: startDate, number_of_days: numDays }),
+      });
+
+      setLoading(btnId, false, 'Rent this Car');
+
+      if (!ok) {
+        return showAlert(alertId, data.message || 'Booking failed. Please try again.');
+      }
+
+      // Show success modal
+      const totalCost = data.totalCost || (rentPerDay * numDays);
+      document.getElementById('modal-title').textContent = 'Booking Confirmed!';
+      document.getElementById('modal-body').innerHTML =
+        `<strong>${model}</strong> is booked for <strong>${numDays} day${numDays > 1 ? 's' : ''}</strong>
+         starting <strong>${formatDate(startDate)}</strong>.<br><br>
+         Total: <span style="color:var(--amber);font-weight:700;">${formatCurrency(totalCost)}</span>`;
+
+      const modal = document.getElementById('booking-modal');
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('booking-modal').style.display = 'none';
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
+    function getTodayISO() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    loadCars();
+  </script>
+
+</body>
+</html>

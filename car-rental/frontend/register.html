@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <div class="auth-wrapper">
+    <div class="auth-card fade-up">
+
+      <h2>Create an account</h2>
+      <p class="subtitle">Join DriveEase — choose your account type below</p>
+
+      <!-- Role Selector Tabs -->
+      <div class="role-tabs" id="role-tabs">
+        <div class="role-tab active" id="tab-customer" onclick="switchRole('CUSTOMER')">
+          🧑 Customer
+        </div>
+        <div class="role-tab" id="tab-agency" onclick="switchRole('AGENCY')">
+          🏢 Car Agency
+        </div>
+      </div>
+
+      <div id="register-alert" class="alert"></div>
+
+      <form class="auth-form" id="register-form" novalidate>
+
+        <!-- Hidden role field -->
+        <input type="hidden" id="role" value="CUSTOMER" />
+
+        <div class="form-group">
+          <label class="form-label" for="name" id="name-label">Your Full Name</label>
+          <input
+            type="text"
+            id="name"
+            class="form-control"
+            placeholder="John Doe"
+            autocomplete="name"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input
+            type="email"
+            id="email"
+            class="form-control"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            class="form-control"
+            placeholder="Min. 6 characters"
+            autocomplete="new-password"
+            required
+            minlength="6"
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block mt-1" id="register-btn">
+          Create Account
+        </button>
+
+      </form>
+
+      <p class="auth-footer">
+        Already have an account?
+        <a href="login.html">Sign in →</a>
+      </p>
+
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (Auth.isLoggedIn()) {
+      window.location.href = Auth.isAgency() ? 'dashboard.html' : 'index.html';
+    }
+
+    renderNavbar('register');
+
+    // ── Role Tab Switcher ─────────────────────────────────────
+    function switchRole(role) {
+      document.getElementById('role').value = role;
+
+      document.getElementById('tab-customer').classList.toggle('active', role === 'CUSTOMER');
+      document.getElementById('tab-agency').classList.toggle('active',   role === 'AGENCY');
+
+      const nameLabel = document.getElementById('name-label');
+      const namePlaceholder = document.getElementById('name');
+
+      if (role === 'AGENCY') {
+        nameLabel.textContent      = 'Agency Name';
+        namePlaceholder.placeholder = 'ABC Car Rentals';
+      } else {
+        nameLabel.textContent      = 'Your Full Name';
+        namePlaceholder.placeholder = 'John Doe';
+      }
+
+      hideAlert('register-alert');
+    }
+
+    // ── Registration Form Submit ───────────────────────────────
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert('register-alert');
+
+      const name     = document.getElementById('name').value.trim();
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const role     = document.getElementById('role').value;
+
+      // Client-side validation
+      if (!name) {
+        return showAlert('register-alert', 'Please enter your name.');
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return showAlert('register-alert', 'Please enter a valid email address.');
+      }
+      if (password.length < 6) {
+        return showAlert('register-alert', 'Password must be at least 6 characters.');
+      }
+
+      setLoading('register-btn', true);
+
+      const { ok, data } = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password, role }),
+      });
+
+      setLoading('register-btn', false, 'Create Account');
+
+      if (!ok) {
+        return showAlert('register-alert', data.message || 'Registration failed.');
+      }
+
+      showAlert('register-alert', 'Account created! Redirecting to login…', 'success');
+
+      setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+    });
+  </script>
+
+</body>
+</html>

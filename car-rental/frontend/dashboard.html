@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agency Dashboard — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <div class="container page-wrapper">
+
+    <!-- Header -->
+    <div class="page-header fade-up d-flex justify-between align-center">
+      <div>
+        <h2 id="agency-greeting">Dashboard</h2>
+        <p>Manage your fleet and view all customer bookings.</p>
+      </div>
+      <a href="add-car.html" class="btn btn-primary">
+        + Add New Car
+      </a>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-row fade-up" id="stats-row">
+      <div class="stat-card">
+        <p class="stat-label">Total Cars</p>
+        <p class="stat-value" id="stat-cars">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Total Bookings</p>
+        <p class="stat-value" id="stat-bookings">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Total Revenue</p>
+        <p class="stat-value" id="stat-revenue" style="font-size:1.5rem;">—</p>
+      </div>
+    </div>
+
+    <!-- ── My Fleet ──────────────────────────────────────────── -->
+    <div class="fade-up" style="margin-bottom:2.5rem;">
+      <div class="d-flex justify-between align-center mb-2">
+        <h3>My Fleet</h3>
+      </div>
+      <div id="fleet-container">
+        <div class="loading-overlay"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- ── Booking History ────────────────────────────────────── -->
+    <div class="fade-up">
+      <div class="d-flex justify-between align-center mb-2">
+        <h3>Booking History</h3>
+      </div>
+      <div id="bookings-container">
+        <div class="loading-overlay"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // ── Guard: Agency only ─────────────────────────────────────
+    if (!Auth.isLoggedIn() || !Auth.isAgency()) {
+      window.location.href = Auth.isLoggedIn() ? 'index.html' : 'login.html';
+    }
+
+    renderNavbar('dashboard');
+
+    const user = Auth.getUser();
+    document.getElementById('agency-greeting').textContent = `Welcome, ${user.name}`;
+
+    // ── Load Fleet (all cars by this agency) ───────────────────
+    async function loadFleet() {
+      const { ok, data } = await apiFetch('/cars');
+      const container = document.getElementById('fleet-container');
+
+      if (!ok) {
+        container.innerHTML = `<p class="text-muted">Failed to load fleet.</p>`;
+        return;
+      }
+
+      // Filter only this agency's cars
+      const myCars = (data.cars || []).filter(c => c.agency_name === user.name);
+
+      document.getElementById('stat-cars').textContent = myCars.length;
+
+      if (myCars.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M5 17H3a2 2 0 01-2-2v-4l2.5-6h13L19 11v4a2 2 0 01-2 2h-2"/>
+              <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="14.5" cy="17.5" r="2.5"/>
+            </svg>
+            <h3>No cars yet</h3>
+            <p><a href="add-car.html">Add your first car →</a></p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="card-grid">
+          ${myCars.map(renderFleetCard).join('')}
+        </div>`;
+    }
+
+    function renderFleetCard(car) {
+      return `
+        <div class="card car-card fade-up">
+          <div class="car-card-header">
+            <span class="car-model">${escHtml(car.vehicle_model)}</span>
+            <span class="car-number">${escHtml(car.vehicle_number)}</span>
+          </div>
+          <div class="car-meta">
+            <div class="car-meta-item">
+              <span class="car-meta-label">Seats</span>
+              <span class="car-meta-value">${car.seating_capacity} persons</span>
+            </div>
+            <div class="car-meta-item">
+              <span class="car-meta-label">Rate</span>
+              <span class="car-price">${formatCurrency(car.rent_per_day)}<span>/day</span></span>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:1rem;">
+            <a href="edit-car.html?id=${car.id}" class="btn btn-secondary btn-sm">
+              ✏️ Edit Details
+            </a>
+          </div>
+        </div>`;
+    }
+
+    // ── Load Bookings ──────────────────────────────────────────
+    async function loadBookings() {
+      const { ok, data } = await apiFetch('/bookings/agency');
+      const container = document.getElementById('bookings-container');
+
+      if (!ok) {
+        container.innerHTML = `<p class="text-muted">Failed to load bookings.</p>`;
+        return;
+      }
+
+      const bookings = data.bookings || [];
+
+      // Stats
+      document.getElementById('stat-bookings').textContent = bookings.length;
+      const totalRevenue = bookings.reduce((sum, b) => sum + parseFloat(b.total_cost), 0);
+      document.getElementById('stat-revenue').textContent  = formatCurrency(totalRevenue);
+
+      if (bookings.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <h3>No bookings yet</h3>
+            <p>Bookings for your cars will appear here.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Vehicle</th>
+                <th>Customer</th>
+                <th>Start Date</th>
+                <th>Days</th>
+                <th>Total Cost</th>
+                <th>Booked On</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bookings.map((b, i) => `
+                <tr>
+                  <td class="text-muted">${i + 1}</td>
+                  <td>
+                    <span class="highlight">${escHtml(b.vehicle_model)}</span><br>
+                    <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(b.vehicle_number)}</span>
+                  </td>
+                  <td>
+                    <span class="highlight">${escHtml(b.customer_name)}</span><br>
+                    <span style="font-size:0.75rem;color:var(--text-muted)">${escHtml(b.customer_email)}</span>
+                  </td>
+                  <td>${formatDate(b.start_date)}</td>
+                  <td>${b.number_of_days} day${b.number_of_days > 1 ? 's' : ''}</td>
+                  <td class="amount">${formatCurrency(b.total_cost)}</td>
+                  <td style="font-size:0.8rem;color:var(--text-muted)">${formatDate(b.created_at)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    loadFleet();
+    loadBookings();
+  </script>
+
+</body>
+</html>

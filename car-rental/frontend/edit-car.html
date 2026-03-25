@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Edit Car — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <div class="container page-wrapper">
+
+    <div class="page-header fade-up">
+      <h2>Edit Car Details</h2>
+      <p>Update the information for your listed vehicle.</p>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-state" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Form (shown after car loads) -->
+    <div class="form-card fade-up" id="edit-form-card" style="display:none;">
+
+      <div id="form-alert" class="alert"></div>
+
+      <form id="edit-car-form" novalidate>
+
+        <div class="form-grid">
+
+          <div class="form-group full">
+            <label class="form-label" for="vehicle_model">Vehicle Model</label>
+            <input
+              type="text"
+              id="vehicle_model"
+              class="form-control"
+              placeholder="e.g. Toyota Innova Crysta"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="vehicle_number">Vehicle Number</label>
+            <input
+              type="text"
+              id="vehicle_number"
+              class="form-control"
+              placeholder="e.g. MH01AB1234"
+              style="text-transform:uppercase"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="seating_capacity">Seating Capacity</label>
+            <select id="seating_capacity" class="form-control" required>
+              <option value="" disabled>Select seats</option>
+              <option value="2">2 seats</option>
+              <option value="4">4 seats</option>
+              <option value="5">5 seats</option>
+              <option value="6">6 seats</option>
+              <option value="7">7 seats</option>
+              <option value="8">8 seats</option>
+              <option value="9">9 seats</option>
+              <option value="12">12 seats</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label" for="rent_per_day">Rent per Day (₹)</label>
+            <input
+              type="number"
+              id="rent_per_day"
+              class="form-control"
+              placeholder="e.g. 2500"
+              min="1"
+              required
+            />
+          </div>
+
+        </div>
+
+        <div style="display:flex;gap:0.75rem;margin-top:1.5rem;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary" id="save-btn">
+            Save Changes
+          </button>
+          <a href="dashboard.html" class="btn btn-secondary">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+
+    </div>
+
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // ── Guard: Agency only ────────────────────────────────────
+    if (!Auth.isLoggedIn() || !Auth.isAgency()) {
+      window.location.href = Auth.isLoggedIn() ? 'index.html' : 'login.html';
+    }
+
+    renderNavbar('add-car');
+
+    // ── Read car ID from URL query param ?id=X ─────────────────
+    const params = new URLSearchParams(window.location.search);
+    const carId  = params.get('id');
+
+    if (!carId) {
+      window.location.href = 'dashboard.html';
+    }
+
+    // ── Load existing car data ─────────────────────────────────
+    async function loadCar() {
+      const { ok, data } = await apiFetch(`/cars/${carId}`);
+
+      document.getElementById('loading-state').style.display = 'none';
+
+      if (!ok) {
+        showAlert('form-alert', data.message || 'Car not found or access denied.');
+        document.getElementById('edit-form-card').style.display = 'block';
+        return;
+      }
+
+      const car = data.car;
+
+      document.getElementById('vehicle_model').value    = car.vehicle_model;
+      document.getElementById('vehicle_number').value   = car.vehicle_number;
+      document.getElementById('seating_capacity').value = car.seating_capacity;
+      document.getElementById('rent_per_day').value     = car.rent_per_day;
+
+      document.getElementById('edit-form-card').style.display = 'block';
+    }
+
+    // ── Form Submit ────────────────────────────────────────────
+    document.getElementById('edit-car-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert('form-alert');
+
+      const vehicle_model    = document.getElementById('vehicle_model').value.trim();
+      const vehicle_number   = document.getElementById('vehicle_number').value.trim().toUpperCase();
+      const seating_capacity = parseInt(document.getElementById('seating_capacity').value);
+      const rent_per_day     = parseFloat(document.getElementById('rent_per_day').value);
+
+      if (!vehicle_model || !vehicle_number || !seating_capacity || !rent_per_day) {
+        return showAlert('form-alert', 'All fields are required.');
+      }
+      if (rent_per_day <= 0) {
+        return showAlert('form-alert', 'Rent per day must be greater than 0.');
+      }
+
+      setLoading('save-btn', true);
+
+      const { ok, data } = await apiFetch(`/cars/${carId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ vehicle_model, vehicle_number, seating_capacity, rent_per_day }),
+      });
+
+      setLoading('save-btn', false, 'Save Changes');
+
+      if (!ok) {
+        return showAlert('form-alert', data.message || 'Failed to update car.');
+      }
+
+      showAlert('form-alert', 'Car updated successfully! Redirecting…', 'success');
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
+    });
+
+    // ── Init ───────────────────────────────────────────────────
+    loadCar();
+  </script>
+
+</body>
+</html>

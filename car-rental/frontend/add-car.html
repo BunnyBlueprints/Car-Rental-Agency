@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Car — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <div class="container page-wrapper">
+
+    <div class="page-header fade-up">
+      <h2>Add a New Car</h2>
+      <p>List a vehicle in your fleet for customers to rent.</p>
+    </div>
+
+    <div class="form-card fade-up">
+
+      <div id="form-alert" class="alert"></div>
+
+      <form id="add-car-form" novalidate>
+
+        <div class="form-grid">
+
+          <div class="form-group full">
+            <label class="form-label" for="vehicle_model">Vehicle Model</label>
+            <input
+              type="text"
+              id="vehicle_model"
+              class="form-control"
+              placeholder="e.g. Toyota Innova Crysta"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="vehicle_number">Vehicle Number</label>
+            <input
+              type="text"
+              id="vehicle_number"
+              class="form-control"
+              placeholder="e.g. MH01AB1234"
+              style="text-transform:uppercase"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="seating_capacity">Seating Capacity</label>
+            <select id="seating_capacity" class="form-control" required>
+              <option value="" disabled selected>Select seats</option>
+              <option value="2">2 seats</option>
+              <option value="4">4 seats</option>
+              <option value="5">5 seats</option>
+              <option value="6">6 seats</option>
+              <option value="7">7 seats</option>
+              <option value="8">8 seats</option>
+              <option value="9">9 seats</option>
+              <option value="12">12 seats</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label" for="rent_per_day">Rent per Day (₹)</label>
+            <input
+              type="number"
+              id="rent_per_day"
+              class="form-control"
+              placeholder="e.g. 2500"
+              min="1"
+              required
+            />
+          </div>
+
+        </div>
+
+        <div style="display:flex;gap:0.75rem;margin-top:1.5rem;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary" id="add-btn">
+            Add Car to Fleet
+          </button>
+          <a href="dashboard.html" class="btn btn-secondary">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+
+    </div>
+
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // ── Guard: Agency only ────────────────────────────────────
+    if (!Auth.isLoggedIn() || !Auth.isAgency()) {
+      window.location.href = Auth.isLoggedIn() ? 'index.html' : 'login.html';
+    }
+
+    renderNavbar('add-car');
+
+    // ── Form Submit ────────────────────────────────────────────
+    document.getElementById('add-car-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert('form-alert');
+
+      const vehicle_model    = document.getElementById('vehicle_model').value.trim();
+      const vehicle_number   = document.getElementById('vehicle_number').value.trim().toUpperCase();
+      const seating_capacity = parseInt(document.getElementById('seating_capacity').value);
+      const rent_per_day     = parseFloat(document.getElementById('rent_per_day').value);
+
+      // Validation
+      if (!vehicle_model) {
+        return showAlert('form-alert', 'Please enter the vehicle model.');
+      }
+      if (!vehicle_number) {
+        return showAlert('form-alert', 'Please enter the vehicle number.');
+      }
+      if (!seating_capacity || seating_capacity <= 0) {
+        return showAlert('form-alert', 'Please select a valid seating capacity.');
+      }
+      if (!rent_per_day || rent_per_day <= 0) {
+        return showAlert('form-alert', 'Please enter a valid rent per day (must be > 0).');
+      }
+
+      setLoading('add-btn', true);
+
+      const { ok, data } = await apiFetch('/cars', {
+        method: 'POST',
+        body: JSON.stringify({ vehicle_model, vehicle_number, seating_capacity, rent_per_day }),
+      });
+
+      setLoading('add-btn', false, 'Add Car to Fleet');
+
+      if (!ok) {
+        return showAlert('form-alert', data.message || 'Failed to add car.');
+      }
+
+      showAlert('form-alert', 'Car added successfully! Redirecting to dashboard…', 'success');
+      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
+    });
+  </script>
+
+</body>
+</html>

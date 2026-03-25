@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — DriveEase</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div id="navbar"></div>
+
+  <div class="auth-wrapper">
+    <div class="auth-card fade-up">
+
+      <h2>Welcome back</h2>
+      <p class="subtitle">Sign in to your DriveEase account</p>
+
+      <div id="login-alert" class="alert"></div>
+
+      <form class="auth-form" id="login-form" novalidate>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email address</label>
+          <input
+            type="email"
+            id="email"
+            class="form-control"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            class="form-control"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block mt-1" id="login-btn">
+          Sign In
+        </button>
+
+      </form>
+
+      <p class="auth-footer">
+        Don't have an account?
+        <a href="register.html">Create one →</a>
+      </p>
+
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (Auth.isLoggedIn()) {
+      window.location.href = Auth.isAgency() ? 'dashboard.html' : 'index.html';
+    }
+
+    renderNavbar('login');
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert('login-alert');
+
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) {
+        return showAlert('login-alert', 'Please enter your email and password.');
+      }
+
+      setLoading('login-btn', true);
+
+      const { ok, data } = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+
+      setLoading('login-btn', false, 'Sign In');
+
+      if (!ok) {
+        return showAlert('login-alert', data.message || 'Login failed.');
+      }
+
+      // Save session
+      Auth.save(data.token, data.user);
+
+      showAlert('login-alert', `Welcome back, ${data.user.name}!`, 'success');
+
+      // Redirect by role
+      setTimeout(() => {
+        window.location.href = data.user.role === 'AGENCY' ? 'dashboard.html' : 'index.html';
+      }, 800);
+    });
+  </script>
+
+</body>
+</html>
