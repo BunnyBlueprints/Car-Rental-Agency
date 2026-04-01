@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+require('../models/User');
 const Car = require('../models/Car');
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
