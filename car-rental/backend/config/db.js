@@ -1,12 +1,21 @@
+const path = require('path');
 const mongoose = require('mongoose');
 
-require('dotenv').config();
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+const getMongoUri = () =>
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URI ||
+  process.env.MONGODB_URL ||
+  process.env.DATABASE_URL;
 
 const connectDB = async () => {
-  const mongoUri = process.env.MONGODB_URI;
+  const mongoUri = getMongoUri();
 
   if (!mongoUri) {
-    throw new Error('MONGODB_URI is not defined in the environment.');
+    throw new Error(
+      'MongoDB connection string is missing. Set one of: MONGODB_URI, MONGO_URI, MONGODB_URL, or DATABASE_URL.'
+    );
   }
 
   await mongoose.connect(mongoUri);
