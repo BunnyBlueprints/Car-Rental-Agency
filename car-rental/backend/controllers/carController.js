@@ -10,8 +10,10 @@ const formatCar = (car) => ({
   vehicle_number: car.vehicle_number,
   seating_capacity: car.seating_capacity,
   rent_per_day: car.rent_per_day,
-  agency_id: car.agency_id && car.agency_id._id ? car.agency_id._id.toString() : car.agency_id.toString(),
-  agency_name: car.agency_id && car.agency_id.name ? car.agency_id.name : undefined,
+  agency_id: car.agency_id
+    ? (car.agency_id._id ? car.agency_id._id.toString() : car.agency_id.toString())
+    : null,
+  agency_name: car.agency_id && car.agency_id.name ? car.agency_id.name : 'Unknown Agency',
 });
 
 const addCar = async (req, res) => {
@@ -107,7 +109,9 @@ const getAllCars = async (req, res) => {
       .populate('agency_id', 'name')
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ cars: cars.map(formatCar) });
+    const visibleCars = cars.filter((car) => car.agency_id);
+
+    return res.status(200).json({ cars: visibleCars.map(formatCar) });
   } catch (err) {
     console.error('Get cars error:', err);
     return res.status(500).json({ message: 'Server error. Please try again.' });
