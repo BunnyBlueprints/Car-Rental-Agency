@@ -1,6 +1,13 @@
 const bcrypt = require('bcryptjs');
-const jwt    = require('jsonwebtoken');
-const db     = require('../config/db');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+const formatUser = (user) => ({
+  id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
 
 const register = async (req, res) => {
   try {
@@ -15,25 +22,23 @@ const register = async (req, res) => {
       return res.status(400).json({ message: 'Invalid role. Must be CUSTOMER or AGENCY.' });
     }
 
-    const [existing] = await db.query(
-      'SELECT id FROM users WHERE email = ?',
-      [email.toLowerCase()]
-    );
-    if (existing.length > 0) {
+    const existing = await User.findOne({ email: email.toLowerCase() }).select('_id');
+    if (existing) {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
-    const saltRounds   = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const [result] = await db.query(
-      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-      [name.trim(), email.toLowerCase(), hashedPassword, role.toUpperCase()]
-    );
+    const user = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      role: role.toUpperCase(),
+    });
 
     return res.status(201).json({
       message: 'Registration successful.',
-      userId: result.insertId,
+      userId: user._id.toString(),
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -49,16 +54,10 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' });
     }
 
-    const [rows] = await db.query(
-      'SELECT id, name, email, password, role FROM users WHERE email = ?',
-      [email.toLowerCase()]
-    );
-
-    if (rows.length === 0) {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
-
-    const user = rows[0];
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
@@ -66,7 +65,7 @@ const login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userId: user.id, role: user.role },
+      { userId: user._id.toString(), role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
@@ -74,11 +73,7 @@ const login = async (req, res) => {
     return res.status(200).json({
       message: 'Login successful.',
       token,
-      user: {
-        id:   user.id,
-        name: user.name,
-        role: user.role,
-      },
+      user: formatUser(user),
     });
   } catch (err) {
     console.error('Login error:', err);

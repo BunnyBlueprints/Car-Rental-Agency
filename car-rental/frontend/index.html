@@ -158,7 +158,7 @@
             <div id="alert-car-${car.id}" class="alert"></div>
             <button
               class="btn btn-primary"
-              onclick="rentCar(${car.id}, '${escHtml(car.vehicle_model)}', ${car.rent_per_day})"
+              onclick='rentCar(${JSON.stringify(car.id)}, ${JSON.stringify(car.vehicle_model)}, ${JSON.stringify(car.rent_per_day)})'
               id="rent-btn-${car.id}"
             >
               Rent this Car

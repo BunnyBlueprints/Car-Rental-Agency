@@ -1,8 +1,12 @@
-const db = require('../config/db');
+const mongoose = require('mongoose');
+const Booking = require('../models/Booking');
+const Car = require('../models/Car');
+
+const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
 const rentCar = async (req, res) => {
   try {
-    const customerId  = req.user.userId;
+    const customerId = req.user.userId;
     const { car_id, start_date, number_of_days } = req.body;
 
     if (!car_id || !start_date || !number_of_days) {
@@ -13,50 +17,57 @@ const rentCar = async (req, res) => {
       return res.status(400).json({ message: 'Number of days must be greater than 0.' });
     }
 
-    const today     = new Date();
+    if (!isValidObjectId(car_id)) {
+      return res.status(404).json({ message: 'Car not found.' });
+    }
+
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const startDate = new Date(start_date);
+    if (Number.isNaN(startDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid start date.' });
+    }
+
     if (startDate < today) {
       return res.status(400).json({ message: 'Start date cannot be in the past.' });
     }
 
-    const [carRows] = await db.query(
-      'SELECT id, rent_per_day FROM cars WHERE id = ?',
-      [car_id]
-    );
-    if (carRows.length === 0) {
+    const car = await Car.findById(car_id).select('_id rent_per_day');
+    if (!car) {
       return res.status(404).json({ message: 'Car not found.' });
     }
 
-    const car       = carRows[0];
-    const endDate   = new Date(startDate);
-    endDate.setDate(endDate.getDate() + parseInt(number_of_days) - 1);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + parseInt(number_of_days, 10) - 1);
+    endDate.setHours(23, 59, 59, 999);
 
-    const [overlapping] = await db.query(
-      `SELECT id FROM bookings
-       WHERE car_id = ?
-         AND start_date <= ?
-         AND DATE_ADD(start_date, INTERVAL number_of_days - 1 DAY) >= ?`,
-      [car_id, endDate.toISOString().split('T')[0], start_date]
-    );
+    const overlapping = await Booking.findOne({
+      car_id,
+      start_date: { $lte: endDate },
+      end_date: { $gte: startDate },
+    }).select('_id');
 
-    if (overlapping.length > 0) {
+    if (overlapping) {
       return res.status(409).json({
         message: 'This car is already booked for the selected dates. Please choose different dates.',
       });
     }
 
-    const totalCost = parseFloat(car.rent_per_day) * parseInt(number_of_days);
+    const totalCost = parseFloat(car.rent_per_day) * parseInt(number_of_days, 10);
 
-    const [result] = await db.query(
-      `INSERT INTO bookings (car_id, customer_id, start_date, number_of_days, total_cost)
-       VALUES (?, ?, ?, ?, ?)`,
-      [car_id, customerId, start_date, number_of_days, totalCost]
-    );
+    const booking = await Booking.create({
+      car_id,
+      customer_id: customerId,
+      start_date: startDate,
+      end_date: endDate,
+      number_of_days,
+      total_cost: totalCost,
+    });
 
     return res.status(201).json({
       message: 'Car rented successfully!',
-      bookingId: result.insertId,
+      bookingId: booking._id.toString(),
       totalCost,
     });
   } catch (err) {
@@ -69,27 +80,31 @@ const getAgencyBookings = async (req, res) => {
   try {
     const agencyId = req.user.userId;
 
-    const [bookings] = await db.query(
-      `SELECT
-          b.id            AS booking_id,
-          c.vehicle_model,
-          c.vehicle_number,
-          c.rent_per_day,
-          u.name          AS customer_name,
-          u.email         AS customer_email,
-          b.start_date,
-          b.number_of_days,
-          b.total_cost,
-          b.created_at
-       FROM bookings b
-       JOIN cars c    ON b.car_id      = c.id
-       JOIN users u   ON b.customer_id = u.id
-       WHERE c.agency_id = ?
-       ORDER BY b.created_at DESC`,
-      [agencyId]
-    );
+    const bookings = await Booking.find()
+      .populate({
+        path: 'car_id',
+        select: 'vehicle_model vehicle_number rent_per_day agency_id',
+        match: { agency_id: agencyId },
+      })
+      .populate('customer_id', 'name email')
+      .sort({ created_at: -1 });
 
-    return res.status(200).json({ bookings });
+    const filteredBookings = bookings
+      .filter((booking) => booking.car_id && booking.customer_id)
+      .map((booking) => ({
+        booking_id: booking._id.toString(),
+        vehicle_model: booking.car_id.vehicle_model,
+        vehicle_number: booking.car_id.vehicle_number,
+        rent_per_day: booking.car_id.rent_per_day,
+        customer_name: booking.customer_id.name,
+        customer_email: booking.customer_id.email,
+        start_date: booking.start_date,
+        number_of_days: booking.number_of_days,
+        total_cost: booking.total_cost,
+        created_at: booking.created_at,
+      }));
+
+    return res.status(200).json({ bookings: filteredBookings });
   } catch (err) {
     console.error('Get agency bookings error:', err);
     return res.status(500).json({ message: 'Server error. Please try again.' });
